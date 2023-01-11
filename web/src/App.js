@@ -1,6 +1,5 @@
 import {useEffect} from 'react';
 import {useState} from 'react';
-import io from 'socket.io-client';
 import CursorSvg from "./Cursor";
 import wait from 'wait';
 import styled from 'styled-components'
