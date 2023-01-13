@@ -1,43 +1,33 @@
 import styled from 'styled-components'
-import {useEffect, useReducer, useRef, useState} from "react";
+import {useEffect, useRef, useState} from "react";
 import wait from "wait";
 import CursorSvg from "./Cursor";
 import axios from "axios";
 import {Typography, Button} from "antd";
-import {useDrag, useDrop} from "react-dnd";
 import {PauseCircleOutlined, PlayCircleOutlined, RedoOutlined, UndoOutlined} from "@ant-design/icons";
 import {API_URL} from "../config";
 
 const {Text} = Typography
 
-function reducer(state, action) {
-    switch (action.type) {
-        case '':
-            return {count: state.count + 1};
-        case 'decrement':
-            return {count: state.count - 1};
-        default:
-            throw new Error();
+const calculateHistoryLength = (history) => {
+    const histories = []
+
+    for (const item in history) {
+        histories.push(history[item].mouseTrack.length)
     }
+
+    return Math.max(...histories)
 }
 
-const SharedSpace = ({socket, userName, userColor}) => {
+const SharedSpace = ({socket, userName, userColor, userId}) => {
     const [users, setUsers] = useState([])
     const [isPaused, setIsPaused] = useState(false)
-    const [currentSlice, setCurrentSlice] = useState(0)
-    const [state, dispatch] = useReducer(reducer, {});
-
-    const [collectedProps, drop] = useDrop(() => ({
-        accept: 'BOX'
-    }))
+    const [history, setHistory] = useState({})
+    const [historyLength, setHistoryLength] = useState(0)
+    const [historyCursor, setHistoryCursor] = useState(0)
 
     const [localMousePos, setLocalMousePos] = useState({});
     const ref = useRef(null)
-
-    const [collected, drag, dragPreview] = useDrag(() => ({
-        type: 'BOX',
-        item: {id: 1}
-    }))
 
     const handleMouseMove = async (event) => {
         const rect = ref.current.getBoundingClientRect()
@@ -45,40 +35,65 @@ const SharedSpace = ({socket, userName, userColor}) => {
         const x = (event.clientX) - rect.left;
         const y = (event.clientY) - rect.top;
 
-        // const x = (event.pageX) - (event.target.offsetLeft || window.offsetLeft);
-        // const y = (event.pageY) - (event.target.offsetTop || window.offsetTop);
+        if (isPaused) return
 
         setLocalMousePos({x, y});
 
         await wait(120)
 
-        // console.log(x, y, window.offsetLeft, event.clientX, event.target.offsetLeft);
         if ((localMousePos.x !== x || localMousePos.y !== y)) {
             socket.emit('MOVE_CURSOR', {
                 x, y, userId: socket.id
+            })
+
+            const mouseTrack = history[socket.id]?.mouseTrack || []
+
+            setHistory({
+                [socket.id]: {
+                    mouseTrack: [...mouseTrack, {x, y}]
+                }
             })
         }
     };
 
     useEffect(() => {
         socket.on('UPDATE_CURSOR_COORDINATES', ({x, y, userId}) => {
-            const updatedUsers =
-                users.map((user) => {
-                    if (user.userId === userId) {
-                        return {
-                            ...user,
-                            x,
-                            y
+            if (!isPaused) {
+                const updatedUsers =
+                    users.map((user) => {
+                        if (user.userId === userId) {
+                            const mouseTrack = history[user.userId]?.mouseTrack || []
+
+                            setHistory({
+                                [user.userId]: {
+                                    mouseTrack: [...mouseTrack, {x, y}]
+                                }
+                            })
+
+                            return {
+                                ...user,
+                                x,
+                                y
+                            }
                         }
+
+                        return user
+                    })
+
+                setUsers(updatedUsers)
+
+                const mouseTrack = history[socket.id]?.mouseTrack || []
+
+                setHistory({
+                    [socket.id]: {
+                        mouseTrack: [...mouseTrack, {x, y}]
                     }
-
-                    return user
                 })
-
-            setUsers(updatedUsers)
+            }
         })
     }, [JSON.stringify(users)])
 
+    console.log(history);
     useEffect(() => {
         socket.on('USER_JOINED', (user) => {
             setUsers([...users, user])
@@ -89,9 +104,7 @@ const SharedSpace = ({socket, userName, userColor}) => {
             setUsers(users.filter(user => user.userId !== userId))
         })
 
-        console.log(API_URL);
         axios.get(`${API_URL}/users`).then(({data}) => {
-            console.log(data.data);
             setUsers(data.data)
         })
     }, [])
@@ -99,7 +112,7 @@ const SharedSpace = ({socket, userName, userColor}) => {
     const renderCursors = () => users.filter(user => user.userId !== socket.id).map((user) => {
         return (
             <Cursor onClick={() => {
-                console.log(user)
+                alert(user.userName)
             }} key={user.userId} style={{
                 width: 100,
                 height: 30,
@@ -109,14 +122,6 @@ const SharedSpace = ({socket, userName, userColor}) => {
             }}>
                 <Text className="user-name">{user.userName}</Text>
                 <CursorSvg color={user.userColor}/>
-
-                {/*{collected.isDragging ? (*/}
-                {/*    <div ref={dragPreview}/>*/}
-                {/*) : (*/}
-                {/*    <div ref={drag} {...collected}>*/}
-                {/*        ...*/}
-                {/*    </div>*/}
-                {/*)}*/}
             </Cursor>
         )
     })
@@ -124,11 +129,84 @@ const SharedSpace = ({socket, userName, userColor}) => {
     return (
         <>
             <Buttons>
-                <Button type="primary" shape="circle" disabled={!isPaused} icon={<RedoOutlined/>} size={"middle"}/>
-                <Button type="primary" shape="circle" icon={isPaused ? <PlayCircleOutlined/> : <PauseCircleOutlined />} size={"middle"} onClick={() => {
+                <Button type="primary" shape="circle" disabled={!isPaused || historyCursor === 0} icon={<RedoOutlined/>}
+                        size={"middle"} onClick={() => {
+                    for (const historyItem in history) {
+                        const {x, y} = history[historyItem].mouseTrack[historyCursor - 1]
+
+                        if (userId === historyItem) {
+                            setLocalMousePos({
+                                x, y
+                            })
+                        } else {
+                            setUsers([...users.map(user => {
+                                if (user.userId === historyItem) {
+                                    return {
+                                        ...user,
+                                        x,
+                                        y,
+                                    }
+                                }
+
+                                return user
+                            })])
+                        }
+                    }
+
+                    setHistoryCursor(historyCursor - 1)
+                }}/>
+                <Button type="primary" shape="circle" icon={isPaused ? <PlayCircleOutlined/> : <PauseCircleOutlined/>}
+                        size={"middle"} onClick={() => {
+                    if (!isPaused) {
+                        const maxLength = calculateHistoryLength(history)
+
+                        setHistoryLength(maxLength)
+                        setHistoryCursor(maxLength)
+                    } else {
+                        axios.get(`${API_URL}/users`).then(({data}) => {
+                            console.log(data);
+                            setUsers(data.data)
+
+                            const me = data.data.find(user => user.userId === userId)
+
+                            setLocalMousePos({
+                                x: me.x,
+                                y: me.y
+                            })
+
+                            setIsPaused(false)
+                            setHistoryLength(0)
+                            setHistoryCursor(0)
+                        })
+
+                    }
+
                     setIsPaused(true)
                 }}/>
-                <Button type="primary" shape="circle" disabled={!isPaused} icon={<UndoOutlined/>} size={"middle"}/>
+                <Button type="primary" shape="circle" disabled={!isPaused || historyCursor >= historyLength}
+                        icon={<UndoOutlined/>} size={"middle"} onClick={() => {
+                    for (const historyItem in history) {
+                        const {x, y} = history[historyItem].mouseTrack[historyCursor]
+
+                        if (userId === historyItem) {
+                            setLocalMousePos({
+                                x, y
+                            })
+                        } else {
+                            setUsers([...users.map(user => {
+                                if (user.userId === historyItem) {
+                                    return {
+                                        ...user,
+                                        x,
+                                        y,
+                                    }
+                                }
+                            })])
+                        }
+                    }
+
+                    setHistoryCursor(historyCursor + 1)
+                }}/>
             </Buttons>
             <Container onMouseMove={handleMouseMove} className={"space"} ref={ref}>
                 {renderCursors()}
@@ -137,8 +215,6 @@ const SharedSpace = ({socket, userName, userColor}) => {
                     height: 30,
                     position: 'fixed',
                     transform: `translate(${localMousePos.x || 0}px, ${localMousePos.y || 0}px)`,
-                    // transition: "transform 120ms linear",
-                }} onClick={() => {
                 }}>
                     <Text className="user-name">{userName}</Text>
                     <CursorSvg color={userColor}/>

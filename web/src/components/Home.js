@@ -10,7 +10,7 @@ import {RotatingLines} from "react-loader-spinner";
 const {Title} = Typography
 
 export default function Home() {
-    const {isConnected, socket, userColor, userName} = useConnection()
+    const {isConnected, socket, userColor, userName, userId} = useConnection()
     const [notificationApi, contextHolder] = notification.useNotification();
 
     const user = useGetUser()
@@ -23,9 +23,11 @@ export default function Home() {
         })
 
         socket.on('USER_LEFT', ({userName}) => {
-            notificationApi.warning({
-                message: `${userName} left the space`,
-            })
+            if (userName) {
+                notificationApi.warning({
+                    message: `${userName} left the space`,
+                })
+            }
         })
     }, [])
 
@@ -52,7 +54,7 @@ export default function Home() {
                                 window.location.href = '/login'
                             }}>Leave</Button>
                         </Header>
-                        <SharedSpace socket={socket} userColor={userColor} userName={userName}/>
+                        <SharedSpace userId={userId} socket={socket} userColor={userColor} userName={userName}/>
                     </>}
                 </Container>
             </Layout>
