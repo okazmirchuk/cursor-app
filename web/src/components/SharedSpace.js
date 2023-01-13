@@ -39,68 +39,58 @@ const SharedSpace = ({socket, userName, userColor, userId}) => {
 
         setLocalMousePos({x, y});
 
+        const mouseTrack = history[socket.id]?.mouseTrack || []
+
+        setHistory({
+            ...history,
+            [socket.id]: {
+                mouseTrack: [...mouseTrack, {x, y}]
+            }
+        })
+
         await wait(120)
 
         if ((localMousePos.x !== x || localMousePos.y !== y)) {
             socket.emit('MOVE_CURSOR', {
                 x, y, userId: socket.id
             })
-
-            const mouseTrack = history[socket.id]?.mouseTrack || []
-
-            setHistory({
-                [socket.id]: {
-                    mouseTrack: [...mouseTrack, {x, y}]
-                }
-            })
         }
     };
 
     useEffect(() => {
         socket.on('UPDATE_CURSOR_COORDINATES', ({x, y, userId}) => {
-            if (!isPaused) {
-                const updatedUsers =
-                    users.map((user) => {
-                        if (user.userId === userId) {
-                            const mouseTrack = history[user.userId]?.mouseTrack || []
+            const updatedUsers =
+                users.map((user) => {
+                    if (user.userId === userId) {
+                        const mouseTrack = history[userId]?.mouseTrack || []
 
-                            setHistory({
-                                [user.userId]: {
-                                    mouseTrack: [...mouseTrack, {x, y}]
-                                }
-                            })
-
-                            return {
-                                ...user,
-                                x,
-                                y
+                        setHistory({
+                            ...history,
+                            [userId]: {
+                                mouseTrack: [...mouseTrack, {x, y}]
                             }
+                        })
+
+                        return {
+                            ...user,
+                            x,
+                            y
                         }
-
-                        return user
-                    })
-
-                setUsers(updatedUsers)
-
-                const mouseTrack = history[socket.id]?.mouseTrack || []
-
-                setHistory({
-                    [socket.id]: {
-                        mouseTrack: [...mouseTrack, {x, y}]
                     }
-                })
-            }
-        })
-    }, [JSON.stringify(users)])
 
-    console.log(history);
+                    return user
+                })
+
+            setUsers(updatedUsers)
+        })
+    }, [users.length, history])
+
     useEffect(() => {
         socket.on('USER_JOINED', (user) => {
             setUsers([...users, user])
         })
 
         socket.on('USER_LEFT', ({userId}) => {
-            console.log('user left: ', userId);
             setUsers(users.filter(user => user.userId !== userId))
         })
 
@@ -132,7 +122,12 @@ const SharedSpace = ({socket, userName, userColor, userId}) => {
                 <Button type="primary" shape="circle" disabled={!isPaused || historyCursor === 0} icon={<RedoOutlined/>}
                         size={"middle"} onClick={() => {
                     for (const historyItem in history) {
-                        const {x, y} = history[historyItem].mouseTrack[historyCursor - 1]
+                        const mouseTrack = history[historyItem].mouseTrack
+
+                        const {
+                            x,
+                            y
+                        } = mouseTrack[historyCursor - 1]
 
                         if (userId === historyItem) {
                             setLocalMousePos({
@@ -160,11 +155,30 @@ const SharedSpace = ({socket, userName, userColor, userId}) => {
                     if (!isPaused) {
                         const maxLength = calculateHistoryLength(history)
 
+                        for (const historyItem in history) {
+                            const itemLength = history[historyItem].mouseTrack.length
+
+                            const diff = maxLength - itemLength
+
+                            if (diff > 0) {
+                                const lastPosition = history[historyItem].mouseTrack[0]
+
+                                const filledArray = new Array(diff).fill(lastPosition)
+
+                                setHistory({
+                                    ...history,
+                                    [historyItem]: {
+                                        mouseTrack: [...filledArray, ...history[historyItem].mouseTrack]
+                                    }
+                                })
+                            }
+                        }
+
+                        console.log(history);
                         setHistoryLength(maxLength)
                         setHistoryCursor(maxLength)
                     } else {
                         axios.get(`${API_URL}/users`).then(({data}) => {
-                            console.log(data);
                             setUsers(data.data)
 
                             const me = data.data.find(user => user.userId === userId)
@@ -177,6 +191,7 @@ const SharedSpace = ({socket, userName, userColor, userId}) => {
                             setIsPaused(false)
                             setHistoryLength(0)
                             setHistoryCursor(0)
+                            setHistory({})
                         })
 
                     }
