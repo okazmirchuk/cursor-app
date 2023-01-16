@@ -8,27 +8,65 @@ info:
 servers:
   app:
     url: localhost:4000/socket.io
-    protocol: wss
+    protocol: ws
 
 channels:
   /:
     publish:
       message:
         oneOf:
-          - $ref: "#/components/messages/Typing"
+          - $ref: "#/components/messages/USER_JOINED"
+          - $ref: "#/components/messages/USER_LEFT"
+          - $ref: "#/components/messages/UPDATE_CURSOR_COORDINATES"
+    subscribe:
+      message:
+        oneOf:
+          - $ref: "#/components/messages/USER_JOINED"
+          - $ref: "#/components/messages/MOVE_CURSOR"
+          - $ref: "#/components/messages/USER_LEFT"
+
 
 components:
   messages:
-    Typing:
-      name: typing
-#  USER_JOINED:
-#    name: USER_JOINED
-#    payload:
-#      type: object
-#      properties:
-#        userName:
-#          type: string
-#        userId:
-#          type: string
-#        userColor:
-#          type: string
+    USER_JOINED:
+      name: USER_JOINED
+      payload:
+        type: object
+        properties:
+          userName:
+            type: string
+          userId:
+            type: string
+          userColor:
+            type: string
+    USER_LEFT:
+      name: USER_LEFT
+      payload:
+        type: object
+        properties:
+          userName:
+            type: string
+          userId:
+            type: string
+    UPDATE_CURSOR_COORDINATES:
+      name: UPDATE_CURSOR_COORDINATES
+      payload:
+        type: object
+        properties:
+          x:
+            type: string
+          y:
+            type: string
+          userId:
+            type: string
+    MOVE_CURSOR:
+      name: MOVE_CURSOR
+      payload:
+        type: object
+        properties:
+          x:
+            type: string
+          y:
+            type: string
+          userId:
+            type: string

@@ -25,6 +25,7 @@ const SharedSpace = ({socket, userName, userColor, userId}) => {
     const [history, setHistory] = useState({})
     const [historyLength, setHistoryLength] = useState(0)
     const [historyCursor, setHistoryCursor] = useState(0)
+    const isPausedRef = useRef(false)
 
     const [localMousePos, setLocalMousePos] = useState({});
     const ref = useRef(null)
@@ -58,9 +59,17 @@ const SharedSpace = ({socket, userName, userColor, userId}) => {
     };
 
     useEffect(() => {
+        isPausedRef.current = isPaused
+    }, [isPaused])
+
+    useEffect(() => {
         socket.on('UPDATE_CURSOR_COORDINATES', ({x, y, userId}) => {
             const updatedUsers =
                 users.map((user) => {
+                    if (isPausedRef.current) {
+                        return user
+                    }
+
                     if (user.userId === userId) {
                         const mouseTrack = history[userId]?.mouseTrack || []
 
